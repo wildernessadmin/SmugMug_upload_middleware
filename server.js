@@ -14,6 +14,14 @@ const CONSUMER_SECRET = process.env.SMUGMUG_API_SECRET;
 const TOKEN = process.env.SMUGMUG_OAUTH_TOKEN;
 const TOKEN_SECRET = process.env.SMUGMUG_OAUTH_TOKEN_SECRET;
 
+// --- HEALTH CHECK: ARE THE KEYS LOADED? ---
+console.log("Vault Status:", {
+  hasApiKey: !!CONSUMER_KEY,
+  hasApiSecret: !!CONSUMER_SECRET,
+  hasOAuthToken: !!TOKEN,
+  hasOAuthSecret: !!TOKEN_SECRET
+});
+
 // Configure SmugMug OAuth 1.0a Math
 const oauth = OAuth({
   consumer: { key: CONSUMER_KEY, secret: CONSUMER_SECRET },
