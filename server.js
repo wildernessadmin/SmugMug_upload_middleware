@@ -25,43 +25,55 @@ const oauth = OAuth({
 
 app.post('/upload', upload.single('photo'), async (req, res) => {
   try {
+    console.log("=== NEW UPLOAD REQUEST ===");
+    console.log("File Name:", req.file ? req.file.originalname : "Missing File!");
+    console.log("Raw Gallery URL from Salesforce:", req.body.galleryUrl);
+
     if (!req.file) return res.status(400).send('No photo attached.');
 
     const { tripId, galleryUrl } = req.body;
-    const fileName = req.file.originalname;
+    
+    if (!galleryUrl) {
+      throw new Error("The Gallery URL was blank or didn't make it to the server!");
+    }
 
-    // TODO: You will need to map the public 'galleryUrl' to SmugMug's internal AlbumUri.
-    // E.g., if galleryUrl is "smugmug.com/gallery/XYZ", the AlbumUri is "/api/v2/album/XYZ"
-    // For now, we will use a placeholder or extract the ID from the end of the URL.
+    // Attempting to extract the ID
     const albumId = galleryUrl.split('/').pop(); 
     const albumUri = `/api/v2/album/${albumId}`;
+    console.log("Calculated SmugMug AlbumUri:", albumUri);
 
     const request_data = {
       url: 'https://upload.smugmug.com/',
       method: 'POST',
     };
 
-    // Generate the cryptographic signature
     const headers = oauth.toHeader(oauth.authorize(request_data, { key: TOKEN, secret: TOKEN_SECRET }));
     
-    // Add SmugMug's mandatory upload headers
     headers['Accept'] = 'application/json';
     headers['X-Smug-Version'] = 'v2';
     headers['X-Smug-ResponseType'] = 'JSON';
     headers['X-Smug-AlbumUri'] = albumUri;
-    headers['X-Smug-FileName'] = fileName;
+    headers['X-Smug-FileName'] = req.file.originalname;
     headers['Content-Length'] = req.file.size;
     
-    // Fire it to SmugMug
+    console.log("Firing off to SmugMug...");
+    
     const smugResponse = await axios.post(request_data.url, req.file.buffer, {
       headers: headers,
-      maxBodyLength: Infinity, // Tells the server to allow massive files!
+      maxBodyLength: Infinity, 
     });
 
+    console.log("✅ Success! SmugMug Response:", smugResponse.data);
     res.status(200).json({ success: true, message: 'Photo securely uploaded to SmugMug!' });
 
   } catch (error) {
-    console.error("SmugMug Upload Error:", error.response ? error.response.data : error.message);
+    console.error("❌ === FULL SMUGMUG CRASH LOG ===");
+    if (error.response) {
+      console.error("Status Code:", error.response.status);
+      console.error("SmugMug Rejection Data:", error.response.data);
+    } else {
+      console.error("Server Error Message:", error.message);
+    }
     res.status(500).json({ success: false, error: 'Failed to upload to SmugMug' });
   }
 });
