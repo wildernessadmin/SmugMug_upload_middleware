@@ -25,10 +25,6 @@ const oauth = OAuth({
 
 app.post('/upload', upload.single('photo'), async (req, res) => {
   try {
-    console.log("=== NEW UPLOAD REQUEST ===");
-    console.log("File Name:", req.file ? req.file.originalname : "Missing File!");
-    console.log("Raw Gallery URL from Salesforce:", req.body.galleryUrl);
-
     if (!req.file) return res.status(400).send('No photo attached.');
 
     const { tripId, galleryUrl } = req.body;
@@ -37,10 +33,21 @@ app.post('/upload', upload.single('photo'), async (req, res) => {
       throw new Error("The Gallery URL was blank or didn't make it to the server!");
     }
 
-    // Attempting to extract the ID
-    const albumId = galleryUrl.split('/').pop(); 
+    // --- NEW SMART URL PARSER ---
+    let albumId = "";
+    if (galleryUrl.includes('/upload/')) {
+      // If it's a Guest Link: .../upload/pL29DR/here
+      const parts = galleryUrl.split('/');
+      const uploadIndex = parts.indexOf('upload');
+      albumId = parts[uploadIndex + 1]; // Grabs 'pL29DR'
+    } else {
+      // If it's a Standard Link: .../gallery/pL29DR
+      albumId = galleryUrl.split('/').pop();
+    }
+    
     const albumUri = `/api/v2/album/${albumId}`;
     console.log("Calculated SmugMug AlbumUri:", albumUri);
+    // ----------------------------
 
     const request_data = {
       url: 'https://upload.smugmug.com/',
@@ -55,8 +62,6 @@ app.post('/upload', upload.single('photo'), async (req, res) => {
     headers['X-Smug-AlbumUri'] = albumUri;
     headers['X-Smug-FileName'] = req.file.originalname;
     headers['Content-Length'] = req.file.size;
-    
-    console.log("Firing off to SmugMug...");
     
     const smugResponse = await axios.post(request_data.url, req.file.buffer, {
       headers: headers,
