@@ -41,21 +41,17 @@ app.post('/upload', upload.single('photo'), async (req, res) => {
       throw new Error("The Gallery URL was blank or didn't make it to the server!");
     }
 
-    // --- NEW SMART URL PARSER ---
     let albumId = "";
     if (galleryUrl.includes('/upload/')) {
-      // If it's a Guest Link: .../upload/pL29DR/here
       const parts = galleryUrl.split('/');
       const uploadIndex = parts.indexOf('upload');
-      albumId = parts[uploadIndex + 1]; // Grabs 'pL29DR'
+      albumId = parts[uploadIndex + 1]; 
     } else {
-      // If it's a Standard Link: .../gallery/pL29DR
       albumId = galleryUrl.split('/').pop();
     }
     
     const albumUri = `/api/v2/album/${albumId}`;
     console.log("Calculated SmugMug AlbumUri:", albumUri);
-    // ----------------------------
 
     const request_data = {
       url: 'https://upload.smugmug.com/',
@@ -64,12 +60,17 @@ app.post('/upload', upload.single('photo'), async (req, res) => {
 
     const headers = oauth.toHeader(oauth.authorize(request_data, { key: TOKEN, secret: TOKEN_SECRET }));
     
+    // --- THE CRITICAL FIX: EXPLICIT HEADERS ---
     headers['Accept'] = 'application/json';
+    headers['Content-Type'] = req.file.mimetype || 'image/jpeg'; // Stops the 401 Signature crash
+    headers['Content-MD5'] = crypto.createHash('md5').update(req.file.buffer).digest('base64'); // SmugMug required
     headers['X-Smug-Version'] = 'v2';
     headers['X-Smug-ResponseType'] = 'JSON';
     headers['X-Smug-AlbumUri'] = albumUri;
     headers['X-Smug-FileName'] = req.file.originalname;
     headers['Content-Length'] = req.file.size;
+    headers['User-Agent'] = 'WildernessGuideProxy/1.0';
+    // ------------------------------------------
     
     const smugResponse = await axios.post(request_data.url, req.file.buffer, {
       headers: headers,
@@ -83,7 +84,9 @@ app.post('/upload', upload.single('photo'), async (req, res) => {
     console.error("❌ === FULL SMUGMUG CRASH LOG ===");
     if (error.response) {
       console.error("Status Code:", error.response.status);
-      console.error("SmugMug Rejection Data:", error.response.data);
+      const errData = error.response.data;
+      // Forces Render to print the error even if it's a raw Buffer
+      console.error("SmugMug Rejection Data:", errData instanceof Buffer ? errData.toString() : errData); 
     } else {
       console.error("Server Error Message:", error.message);
     }
