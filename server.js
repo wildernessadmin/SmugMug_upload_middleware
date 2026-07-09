@@ -132,8 +132,8 @@ app.post('/weather', async (req, res) => {
             
             const url = `http://api.weatherapi.com/v1/forecast.json?key=${WEATHER_API_KEY}&q=${encodeURIComponent(item.locationQuery)}&dt=${item.date}`;
             
-            const apiRes = await fetch(url);
-            const data = await apiRes.json();
+            const apiRes = await axios.get(url);
+            const data = apiRes.data;
 
             if (data && data.forecast && data.forecast.forecastday && data.forecast.forecastday.length > 0) {
                 const dayData = data.forecast.forecastday[0];
