@@ -5,7 +5,7 @@ const OAuth = require('oauth-1.0a');
 const axios = require('axios');
 
 const app = express();
-// Keep the file in temporary memory to process it instantly
+app.use(express.json());
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Pulls your secure keys from the server environment (NEVER hardcode these!)
