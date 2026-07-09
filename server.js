@@ -94,7 +94,6 @@ app.post('/upload', upload.single('photo'), async (req, res) => {
   }
 });
 
-// --- NEW WEATHER ROUTE ---
 app.post('/weather', async (req, res) => {
     try {
         const { locations } = req.body;
@@ -110,7 +109,6 @@ app.post('/weather', async (req, res) => {
 
         let forecastResults = [];
 
-        // WeatherAPI condition code mapping to Ionicons
         const getIcon = (code) => {
             const rainCodes = [1063, 1180, 1183, 1186, 1189, 1192, 1195, 1198, 1201, 1240, 1243, 1246];
             const cloudCodes = [1006, 1009];
@@ -123,39 +121,64 @@ app.post('/weather', async (req, res) => {
             if (partlyCloudyCodes.includes(code)) return 'partly-sunny-outline';
             if (snowCodes.includes(code)) return 'snow-outline';
             if (thunderCodes.includes(code)) return 'thunderstorm-outline';
-            return 'sunny-outline'; // default clear
+            return 'sunny-outline';
         };
 
-        // Fetch forecast for each requested location
+        // Process each day safely
         for (let item of locations) {
             if (!item.locationQuery) continue;
-            
-            const url = `http://api.weatherapi.com/v1/forecast.json?key=${WEATHER_API_KEY}&q=${encodeURIComponent(item.locationQuery)}&dt=${item.date}`;
-            
-            const apiRes = await axios.get(url);
-            const data = apiRes.data;
 
-            if (data && data.forecast && data.forecast.forecastday && data.forecast.forecastday.length > 0) {
-                const dayData = data.forecast.forecastday[0];
-                const dateObj = new Date(dayData.date);
-                const dayStr = dateObj.toLocaleDateString('en-GB', { weekday: 'short' });
-                const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+            try {
+                const url = `http://api.weatherapi.com/v1/forecast.json?key=${WEATHER_API_KEY}&q=${encodeURIComponent(item.locationQuery)}&dt=${item.date}`;
+                const apiRes = await axios.get(url);
+                const data = apiRes.data;
 
-                forecastResults.push({
-                    id: item.date,
-                    day: dayStr,
-                    date: dateStr,
-                    temp: `${Math.round(dayData.day.maxtemp_c)}°C`,
-                    icon: getIcon(dayData.day.condition.code),
-                    location: data.location.name
-                });
+                if (data && data.forecast && data.forecast.forecastday && data.forecast.forecastday.length > 0) {
+                    const dayData = data.forecast.forecastday[0];
+                    const dateObj = new Date(dayData.date);
+                    const dayStr = dateObj.toLocaleDateString('en-GB', { weekday: 'short' });
+                    const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
+                    forecastResults.push({
+                        id: item.date,
+                        day: dayStr,
+                        date: dateStr,
+                        temp: `${Math.round(dayData.day.maxtemp_c)}°C`,
+                        icon: getIcon(dayData.day.condition.code),
+                        location: data.location.name
+                    });
+                }
+            } catch (dayError) {
+                // If a precise lookup fails (e.g. precise hotel name), attempt a broader fallback to 'London, UK' or skip gracefully
+                console.log(`Fuzzy weather search failed for query: "${item.locationQuery}". Trying fallback...`);
+                try {
+                    const fallbackUrl = `http://api.weatherapi.com/v1/forecast.json?key=${WEATHER_API_KEY}&q=London,UK&dt=${item.date}`;
+                    const fallbackRes = await axios.get(fallbackUrl);
+                    const fallbackData = fallbackRes.data;
+                    
+                    if (fallbackData && fallbackData.forecast && fallbackData.forecast.forecastday && fallbackData.forecast.forecastday.length > 0) {
+                        const dayData = fallbackData.forecast.forecastday[0];
+                        const dateObj = new Date(dayData.date);
+                        
+                        forecastResults.push({
+                            id: item.date,
+                            day: dateObj.toLocaleDateString('en-GB', { weekday: 'short' }),
+                            date: dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+                            temp: `${Math.round(dayData.day.maxtemp_c)}°C`,
+                            icon: getIcon(dayData.day.condition.code),
+                            location: 'TBC Location'
+                        });
+                    }
+                } catch (fallbackError) {
+                    console.error("Complete day skip. Failure on query and fallback:", fallbackError.message);
+                }
             }
         }
 
         res.json(forecastResults);
     } catch (error) {
-        console.error("Weather API Error:", error);
-        res.status(500).json({ error: "Failed to fetch weather" });
+        console.error("Global Weather API Error:", error);
+        res.status(500).json({ error: "Failed to fetch weather completely" });
     }
 });
 
