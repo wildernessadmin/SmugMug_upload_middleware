@@ -95,15 +95,20 @@ app.post('/upload', upload.single('photo'), async (req, res) => {
 });
 
 app.post('/weather', async (req, res) => {
+    console.log("🌦️ [WEATHER API] Incoming request received!");
+    console.log("🌦️ [WEATHER API] Raw Payload:", JSON.stringify(req.body, null, 2));
+
     try {
         const { locations } = req.body;
         const WEATHER_API_KEY = process.env.WEATHER_API_KEY;
 
         if (!WEATHER_API_KEY) {
+            console.error("🌦️ [WEATHER API] ERROR: No API Key found in env variables!");
             return res.status(500).json({ error: "Weather API key not configured on server" });
         }
 
         if (!locations || !Array.isArray(locations)) {
+            console.error("🌦️ [WEATHER API] ERROR: Locations payload is invalid or empty!");
             return res.status(400).json({ error: "Invalid locations payload" });
         }
 
@@ -128,10 +133,14 @@ app.post('/weather', async (req, res) => {
         for (let item of locations) {
             if (!item.locationQuery) continue;
 
+            console.log(`🌦️ [WEATHER API] Querying WeatherAPI for: "${item.locationQuery}" on Date: ${item.date}`);
+
             try {
                 const url = `http://api.weatherapi.com/v1/forecast.json?key=${WEATHER_API_KEY}&q=${encodeURIComponent(item.locationQuery)}&dt=${item.date}`;
                 const apiRes = await axios.get(url);
                 const data = apiRes.data;
+
+                console.log(`🌦️ [WEATHER API] Success for "${item.locationQuery}". Returned Location: ${data.location?.name}`);
 
                 if (data && data.forecast && data.forecast.forecastday && data.forecast.forecastday.length > 0) {
                     const dayData = data.forecast.forecastday[0];
@@ -149,9 +158,10 @@ app.post('/weather', async (req, res) => {
                     });
                 }
             } catch (dayError) {
-                // If a precise lookup fails (e.g. precise hotel name), attempt a broader fallback to 'London, UK' or skip gracefully
-                console.log(`Fuzzy weather search failed for query: "${item.locationQuery}". Trying fallback...`);
+                console.error(`🌦️ [WEATHER API] ERROR fetching precise location "${item.locationQuery}":`, dayError.message);
+                
                 try {
+                    console.log(`🌦️ [WEATHER API] Attempting fallback for ${item.date}...`);
                     const fallbackUrl = `http://api.weatherapi.com/v1/forecast.json?key=${WEATHER_API_KEY}&q=London,UK&dt=${item.date}`;
                     const fallbackRes = await axios.get(fallbackUrl);
                     const fallbackData = fallbackRes.data;
@@ -170,14 +180,15 @@ app.post('/weather', async (req, res) => {
                         });
                     }
                 } catch (fallbackError) {
-                    console.error("Complete day skip. Failure on query and fallback:", fallbackError.message);
+                    console.error("🌦️ [WEATHER API] FATAL: Fallback also failed.", fallbackError.message);
                 }
             }
         }
 
+        console.log("🌦️ [WEATHER API] Sending payload back to app:", JSON.stringify(forecastResults));
         res.json(forecastResults);
     } catch (error) {
-        console.error("Global Weather API Error:", error);
+        console.error("🌦️ [WEATHER API] GLOBAL SERVER ERROR:", error.message);
         res.status(500).json({ error: "Failed to fetch weather completely" });
     }
 });
