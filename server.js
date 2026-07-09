@@ -94,5 +94,70 @@ app.post('/upload', upload.single('photo'), async (req, res) => {
   }
 });
 
+// --- NEW WEATHER ROUTE ---
+app.post('/weather', async (req, res) => {
+    try {
+        const { locations } = req.body;
+        const WEATHER_API_KEY = process.env.WEATHER_API_KEY;
+
+        if (!WEATHER_API_KEY) {
+            return res.status(500).json({ error: "Weather API key not configured on server" });
+        }
+
+        if (!locations || !Array.isArray(locations)) {
+            return res.status(400).json({ error: "Invalid locations payload" });
+        }
+
+        let forecastResults = [];
+
+        // WeatherAPI condition code mapping to Ionicons
+        const getIcon = (code) => {
+            const rainCodes = [1063, 1180, 1183, 1186, 1189, 1192, 1195, 1198, 1201, 1240, 1243, 1246];
+            const cloudCodes = [1006, 1009];
+            const partlyCloudyCodes = [1003];
+            const snowCodes = [1066, 1114, 1213, 1219, 1222, 1225];
+            const thunderCodes = [1087, 1273, 1276, 1279, 1282];
+            
+            if (rainCodes.includes(code)) return 'rainy-outline';
+            if (cloudCodes.includes(code)) return 'cloudy-outline';
+            if (partlyCloudyCodes.includes(code)) return 'partly-sunny-outline';
+            if (snowCodes.includes(code)) return 'snow-outline';
+            if (thunderCodes.includes(code)) return 'thunderstorm-outline';
+            return 'sunny-outline'; // default clear
+        };
+
+        // Fetch forecast for each requested location
+        for (let item of locations) {
+            if (!item.locationQuery) continue;
+            
+            const url = `http://api.weatherapi.com/v1/forecast.json?key=${WEATHER_API_KEY}&q=${encodeURIComponent(item.locationQuery)}&dt=${item.date}`;
+            
+            const apiRes = await fetch(url);
+            const data = await apiRes.json();
+
+            if (data && data.forecast && data.forecast.forecastday && data.forecast.forecastday.length > 0) {
+                const dayData = data.forecast.forecastday[0];
+                const dateObj = new Date(dayData.date);
+                const dayStr = dateObj.toLocaleDateString('en-GB', { weekday: 'short' });
+                const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
+                forecastResults.push({
+                    id: item.date,
+                    day: dayStr,
+                    date: dateStr,
+                    temp: `${Math.round(dayData.day.maxtemp_c)}°C`,
+                    icon: getIcon(dayData.day.condition.code),
+                    location: data.location.name
+                });
+            }
+        }
+
+        res.json(forecastResults);
+    } catch (error) {
+        console.error("Weather API Error:", error);
+        res.status(500).json({ error: "Failed to fetch weather" });
+    }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Proxy vault running on port ${PORT}`));
